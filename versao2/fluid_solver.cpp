@@ -1,7 +1,7 @@
 #include "fluid_solver.h"
 #include <cmath>
 
-#define IX(i, j, k) ((i) + (M + 2) * (j) + (M + 2) * (N + 2) * (k))
+#define IX(i, j, k) ((k) + (M + 2) * (j) + (M + 2) * (N + 2) * (i))
 #define SWAP(x0, x)                                                            \
   {                                                                            \
     float *tmp = x0;                                                           \
