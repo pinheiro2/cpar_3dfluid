@@ -63,7 +63,7 @@ void set_bnd(int M, int N, int O, int b, float *x)
   x[IX(M + 1, N + 1, 0)] = 0.33f * (x[IX(M, N + 1, 0)] + x[IX(M + 1, N, 0)] +
                                     x[IX(M + 1, N + 1, 1)]);
 }
-#define BLOCK_SIZE 16 // Tune this based on your cache size
+#define BLOCK_SIZE 8 // Tune this based on your cache size
 
 void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c)
 {
@@ -88,14 +88,11 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
                 int idx = IX(i, j, k); // Precompute the index for the current position
                 float *ptr = &x[idx];  // Pointer to the current element
 
-                x[idx] = (x0[idx] + a *
-                                        ((*(ptr - 1)) +         // Left neighbor
-                                         (*(ptr - (M + 2))) +   // Down neighbor
-                                         (*(ptr - planeSize)) + // Back neighbor
-                                         (*(ptr + 1)) +         // Right neighbor
-                                         (*(ptr + (M + 2))) +   // Up neighbor
-                                         (*(ptr + planeSize))   // Front neighbor
-                                         )) *
+                x[idx] = (x0[idx] +
+                          a * (*(ptr - 1) + *(ptr + 1) +               // Left, right neighbors
+                               *(ptr - (M + 2)) + *(ptr + (M + 2)) +   // Down, up neighbors
+                               *(ptr - planeSize) + *(ptr + planeSize) // Back, front neighbors
+                               )) *
                          inv_c;
               }
             }
