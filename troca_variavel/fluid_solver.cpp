@@ -61,41 +61,24 @@ void set_bnd(int M, int N, int O, int b, float *x)
   x[IX(M + 1, N + 1, 0)] = 0.33f * (x[IX(M, N + 1, 0)] + x[IX(M + 1, N, 0)] +
                                     x[IX(M + 1, N + 1, 1)]);
 }
-#define BLOCK_SIZE 16 // Tune this based on your cache size
 
-void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c)
+// Linear solve for implicit methods (diffusion)
+void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a,
+               float c)
 {
   float inv_c = 1.0f / c;
   for (int l = 0; l < LINEARSOLVERTIMES; l++)
   {
-    for (int ii = 1; ii <= M; ii += BLOCK_SIZE)
+    for (int i = 1; i <= M; i++)
     {
-      for (int jj = 1; jj <= N; jj += BLOCK_SIZE)
+      for (int j = 1; j <= N; j++)
       {
-        for (int kk = 1; kk <= O; kk += BLOCK_SIZE)
+        for (int k = 1; k <= O; k++)
         {
-          // Process BLOCK_SIZE x BLOCK_SIZE x BLOCK_SIZE block
-          for (int i = ii; i < min(ii + BLOCK_SIZE, M + 1); i++)
-          {
-            for (int j = jj; j < min(jj + BLOCK_SIZE, N + 1); j++)
-            {
-              for (int k = kk; k < min(kk + BLOCK_SIZE, O + 1); k++)
-              {
-                int idx = IX(i, j, k);
-                int idx_left = IX(i - 1, j, k);
-                int idx_right = IX(i + 1, j, k);
-                int idx_down = IX(i, j - 1, k);
-                int idx_up = IX(i, j + 1, k);
-                int idx_back = IX(i, j, k - 1);
-                int idx_front = IX(i, j, k + 1);
-
-                x[idx] = (x0[idx] +
-                          a * (x[idx_left] + x[idx_down] + x[idx_back] +
-                               x[idx_right] + x[idx_up] + x[idx_front])) *
-                         inv_c;
-              }
-            }
-          }
+          x[IX(i, j, k)] = (x0[IX(i, j, k)] +
+                            a * (x[IX(i - 1, j, k)] + x[IX(i, j - 1, k)] + x[IX(i, j, k - 1)] +
+                                 x[IX(i + 1, j, k)] + x[IX(i, j + 1, k)] + x[IX(i, j, k + 1)])) *
+                           inv_c;
         }
       }
     }

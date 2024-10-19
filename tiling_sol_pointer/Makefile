@@ -2,7 +2,7 @@ CPP = g++ -Wall
 SRCS = main.cpp fluid_solver.cpp EventManager.cpp
 
 all:
-	$(CPP) $(SRCS) -Ofast -ftree-vectorize -o fluid_sim
+	$(CPP) $(SRCS) -funroll-loops -Ofast -ftree-vectorize -o fluid_sim
 
 clean:
 	@echo Cleaning up...
