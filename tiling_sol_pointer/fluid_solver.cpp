@@ -63,12 +63,12 @@ void set_bnd(int M, int N, int O, int b, float *x)
   x[IX(M + 1, N + 1, 0)] = 0.33f * (x[IX(M, N + 1, 0)] + x[IX(M + 1, N, 0)] +
                                     x[IX(M + 1, N + 1, 1)]);
 }
-#define BLOCK_SIZE 8 // Tune this based on your cache size
+#define BLOCK_SIZE 4
 
 void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c)
 {
   float inv_c = 1.0f / c;
-  int planeSize = (M + 2) * (N + 2); // Size of one "layer" of the 3D grid
+  int planeSize = (M + 2) * (N + 2);
   for (int l = 0; l < LINEARSOLVERTIMES; l++)
   {
     for (int ii = 1; ii <= M; ii += BLOCK_SIZE)
@@ -77,7 +77,6 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
       {
         for (int kk = 1; kk <= O; kk += BLOCK_SIZE)
         {
-          // Process BLOCK_SIZE x BLOCK_SIZE x BLOCK_SIZE block
           for (int i = ii; i < MIN(ii + BLOCK_SIZE, M + 1); i++)
           {
             for (int j = jj; j < MIN(jj + BLOCK_SIZE, N + 1); j++)
@@ -85,14 +84,13 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
               for (int k = kk; k < MIN(kk + BLOCK_SIZE, O + 1); k++)
               {
 
-                int idx = IX(i, j, k); // Precompute the index for the current position
-                float *ptr = &x[idx];  // Pointer to the current element
+                int idx = IX(i, j, k);
+                float *ptr = &x[idx];
 
                 x[idx] = (x0[idx] +
-                          a * (*(ptr - 1) + *(ptr + 1) +               // Left, right neighbors
-                               *(ptr - (M + 2)) + *(ptr + (M + 2)) +   // Down, up neighbors
-                               *(ptr - planeSize) + *(ptr + planeSize) // Back, front neighbors
-                               )) *
+                          a * (*(ptr - 1) + *(ptr + 1) +
+                               *(ptr - (M + 2)) + *(ptr + (M + 2)) +
+                               *(ptr - planeSize) + *(ptr + planeSize))) *
                          inv_c;
               }
             }

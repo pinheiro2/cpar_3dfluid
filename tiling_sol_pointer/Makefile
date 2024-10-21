@@ -2,8 +2,8 @@ CPP = g++ -Wall
 SRCS = main.cpp fluid_solver.cpp EventManager.cpp
 
 all:
-	$(CPP) $(SRCS) -funroll-loops -Ofast -ftree-vectorize -o fluid_sim
-
+	$(CPP) $(SRCS) -march=native -funroll-loops -Ofast -ftree-vectorize -o fluid_sim
+	
 clean:
 	@echo Cleaning up...
 	@rm fluid
