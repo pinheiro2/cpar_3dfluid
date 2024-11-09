@@ -1,0 +1,3 @@
+Total density after 100 timesteps: 140879
+[ perf record: Woken up 19 times to write data ]
+[ perf record: Captured and wrote 7.702 MB perf.data (201107 samples) ]
