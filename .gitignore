@@ -270,3 +270,4 @@ __pycache__/
 
 .[Cc]langd*
 compile_commands.json
+.vscode/settings.json
