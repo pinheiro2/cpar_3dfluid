@@ -14,22 +14,21 @@
 
 #define LINEARSOLVERTIMES 20
 
-// Add sources (density or velocity)
 void add_source(int M, int N, int O, float *x, float *s, float dt)
 {
   int size = (M + 2) * (N + 2) * (O + 2);
+#pragma omp parallel for
   for (int i = 0; i < size; i++)
   {
     x[i] += dt * s[i];
   }
 }
 
-// Set boundary conditions
 void set_bnd(int M, int N, int O, int b, float *x)
 {
   int i, j;
 
-  // Set boundary on faces
+#pragma omp parallel for private(i, j)
   for (i = 1; i <= M; i++)
   {
     for (j = 1; j <= N; j++)
@@ -38,6 +37,8 @@ void set_bnd(int M, int N, int O, int b, float *x)
       x[IX(i, j, O + 1)] = b == 3 ? -x[IX(i, j, O)] : x[IX(i, j, O)];
     }
   }
+
+#pragma omp parallel for private(i, j)
   for (i = 1; i <= N; i++)
   {
     for (j = 1; j <= O; j++)
@@ -46,6 +47,8 @@ void set_bnd(int M, int N, int O, int b, float *x)
       x[IX(M + 1, i, j)] = b == 1 ? -x[IX(M, i, j)] : x[IX(M, i, j)];
     }
   }
+
+#pragma omp parallel for private(i, j)
   for (i = 1; i <= M; i++)
   {
     for (j = 1; j <= O; j++)
@@ -55,67 +58,88 @@ void set_bnd(int M, int N, int O, int b, float *x)
     }
   }
 
-  // Set corners
-  x[IX(0, 0, 0)] = 0.33f * (x[IX(1, 0, 0)] + x[IX(0, 1, 0)] + x[IX(0, 0, 1)]);
-  x[IX(M + 1, 0, 0)] =
-      0.33f * (x[IX(M, 0, 0)] + x[IX(M + 1, 1, 0)] + x[IX(M + 1, 0, 1)]);
-  x[IX(0, N + 1, 0)] =
-      0.33f * (x[IX(1, N + 1, 0)] + x[IX(0, N, 0)] + x[IX(0, N + 1, 1)]);
-  x[IX(M + 1, N + 1, 0)] = 0.33f * (x[IX(M, N + 1, 0)] + x[IX(M + 1, N, 0)] +
-                                    x[IX(M + 1, N + 1, 1)]);
+#pragma omp parallel
+  {
+    x[IX(0, 0, 0)] = 0.33f * (x[IX(1, 0, 0)] + x[IX(0, 1, 0)] + x[IX(0, 0, 1)]);
+    x[IX(M + 1, 0, 0)] =
+        0.33f * (x[IX(M, 0, 0)] + x[IX(M + 1, 1, 0)] + x[IX(M + 1, 0, 1)]);
+    x[IX(0, N + 1, 0)] =
+        0.33f * (x[IX(1, N + 1, 0)] + x[IX(0, N, 0)] + x[IX(0, N + 1, 1)]);
+    x[IX(M + 1, N + 1, 0)] = 0.33f * (x[IX(M, N + 1, 0)] + x[IX(M + 1, N, 0)] +
+                                      x[IX(M + 1, N + 1, 1)]);
+  }
 }
 
+void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c)
+{
+  const float tol = 1e-7;        // Convergence tolerance
+  const int max_iterations = 20; // Maximum allowed iterations
+  int l = 0;                     // Iteration counter
+  float max_c = 0.0f;            // Maximum change for convergence
 
-// red-black solver with convergence check and optimizations
-void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c) {
-    float tol = 1e-7, old_x, change;
-    float max_c = 0.0f;
-    int l = 0;
+  while (l < max_iterations)
+  {
+    max_c = 0.0f;
 
-    do {
-        max_c = 0.0f;
-
-        // Red points
-        #pragma omp parallel for collapse(2) reduction(max:max_c) private(old_x, change)
-        for (int i = 1; i <= M; i++) {
-            for (int j = 1; j <= N; j++) {
-                #pragma omp simd
-                for (int k = 1 + (i + j) % 2; k <= O; k += 2) {
-                    old_x = x[IX(i, j, k)];
-                    x[IX(i, j, k)] = (x0[IX(i, j, k)] +
-                                      a * (x[IX(i - 1, j, k)] + x[IX(i + 1, j, k)] +
-                                           x[IX(i, j - 1, k)] + x[IX(i, j + 1, k)] +
-                                           x[IX(i, j, k - 1)] + x[IX(i, j, k + 1)])) / c;
-                    change = fabs(x[IX(i, j, k)] - old_x);
-                    if (change > max_c) max_c = change;
-                }
-            }
+    // Red points update
+#pragma omp parallel for collapse(2) reduction(max : max_c)
+    for (int i = 1; i <= M; i++)
+    {
+      for (int j = 1; j <= N; j++)
+      {
+#pragma omp simd
+        for (int k = 1 + (i + j) % 2; k <= O; k += 2)
+        {
+          float old_x = x[IX(i, j, k)];
+          x[IX(i, j, k)] = (x0[IX(i, j, k)] +
+                            a * (x[IX(i - 1, j, k)] + x[IX(i + 1, j, k)] +
+                                 x[IX(i, j - 1, k)] + x[IX(i, j + 1, k)] +
+                                 x[IX(i, j, k - 1)] + x[IX(i, j, k + 1)])) /
+                           c;
+          float change = fabs(x[IX(i, j, k)] - old_x);
+          max_c = MAX(max_c, change);
         }
+      }
+    }
 
-        // Black points
-        #pragma omp parallel for collapse(2) reduction(max:max_c) private(old_x, change)
-        for (int i = 1; i <= M; i++) {
-            for (int j = 1; j <= N; j++) {
-                #pragma omp simd
-                for (int k = 1 + (i + j + 1) % 2; k <= O; k += 2) {
-                    old_x = x[IX(i, j, k)];
-                    x[IX(i, j, k)] = (x0[IX(i, j, k)] +
-                                      a * (x[IX(i - 1, j, k)] + x[IX(i + 1, j, k)] +
-                                           x[IX(i, j - 1, k)] + x[IX(i, j + 1, k)] +
-                                           x[IX(i, j, k - 1)] + x[IX(i, j, k + 1)])) / c;
-                    change = fabs(x[IX(i, j, k)] - old_x);
-                    if (change > max_c) max_c = change;
-                }
-            }
+    // Ensure all threads complete red points update
+#pragma omp barrier
+
+    // Black points update
+#pragma omp parallel for collapse(2) reduction(max : max_c)
+    for (int i = 1; i <= M; i++)
+    {
+      for (int j = 1; j <= N; j++)
+      {
+#pragma omp simd
+        for (int k = 1 + (i + j + 1) % 2; k <= O; k += 2)
+        {
+          float old_x = x[IX(i, j, k)];
+          x[IX(i, j, k)] = (x0[IX(i, j, k)] +
+                            a * (x[IX(i - 1, j, k)] + x[IX(i + 1, j, k)] +
+                                 x[IX(i, j - 1, k)] + x[IX(i, j + 1, k)] +
+                                 x[IX(i, j, k - 1)] + x[IX(i, j, k + 1)])) /
+                           c;
+          float change = fabs(x[IX(i, j, k)] - old_x);
+          max_c = MAX(max_c, change);
         }
+      }
+    }
 
-        set_bnd(M, N, O, b, x);
-    } while (max_c > tol && ++l < 20);
+    // Ensure all threads complete black points update
+#pragma omp barrier
+
+    // Update boundary conditions
+    set_bnd(M, N, O, b, x);
+
+    // Convergence check
+    if (max_c <= tol)
+      break;
+
+    l++;
+  }
 }
 
-
-
-// Diffusion step (uses implicit method)
 void diffuse(int M, int N, int O, int b, float *x, float *x0, float diff,
              float dt)
 {
@@ -124,35 +148,26 @@ void diffuse(int M, int N, int O, int b, float *x, float *x0, float diff,
   lin_solve(M, N, O, b, x, x0, a, 1 + 6 * a);
 }
 
-// Advection step (uses velocity field to move quantities)
 void advect(int M, int N, int O, int b, float *d, float *d0, float *u, float *v,
             float *w, float dt)
 {
   float dtX = dt * M, dtY = dt * N, dtZ = dt * O;
 
+#pragma omp parallel for collapse(2)
   for (int i = 1; i <= M; i++)
   {
     for (int j = 1; j <= N; j++)
     {
+#pragma omp simd
       for (int k = 1; k <= O; k++)
       {
         float x = i - dtX * u[IX(i, j, k)];
         float y = j - dtY * v[IX(i, j, k)];
         float z = k - dtZ * w[IX(i, j, k)];
 
-        // Clamp to grid boundaries
-        if (x < 0.5f)
-          x = 0.5f;
-        if (x > M + 0.5f)
-          x = M + 0.5f;
-        if (y < 0.5f)
-          y = 0.5f;
-        if (y > N + 0.5f)
-          y = N + 0.5f;
-        if (z < 0.5f)
-          z = 0.5f;
-        if (z > O + 0.5f)
-          z = O + 0.5f;
+        x = MAX(0.5f, MIN(x, M + 0.5f));
+        y = MAX(0.5f, MIN(y, N + 0.5f));
+        z = MAX(0.5f, MIN(z, O + 0.5f));
 
         int i0 = (int)x, i1 = i0 + 1;
         int j0 = (int)y, j1 = j0 + 1;
@@ -173,11 +188,10 @@ void advect(int M, int N, int O, int b, float *d, float *d0, float *u, float *v,
   set_bnd(M, N, O, b, d);
 }
 
-// Projection step to ensure incompressibility (make the velocity field
-// divergence-free)
 void project(int M, int N, int O, float *u, float *v, float *w, float *p,
              float *div)
 {
+#pragma omp parallel for collapse(3)
   for (int i = 1; i <= M; i++)
   {
     for (int j = 1; j <= N; j++)
@@ -198,6 +212,7 @@ void project(int M, int N, int O, float *u, float *v, float *w, float *p,
   set_bnd(M, N, O, 0, p);
   lin_solve(M, N, O, 0, p, div, 1, 6);
 
+#pragma omp parallel for collapse(3)
   for (int i = 1; i <= M; i++)
   {
     for (int j = 1; j <= N; j++)
@@ -215,7 +230,6 @@ void project(int M, int N, int O, float *u, float *v, float *w, float *p,
   set_bnd(M, N, O, 3, w);
 }
 
-// Step function for density
 void dens_step(int M, int N, int O, float *x, float *x0, float *u, float *v,
                float *w, float diff, float dt)
 {
@@ -226,7 +240,6 @@ void dens_step(int M, int N, int O, float *x, float *x0, float *u, float *v,
   advect(M, N, O, 0, x, x0, u, v, w, dt);
 }
 
-// Step function for velocity
 void vel_step(int M, int N, int O, float *u, float *v, float *w, float *u0,
               float *v0, float *w0, float visc, float dt)
 {
