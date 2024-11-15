@@ -77,8 +77,8 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
   int l = 0;                     // Iteration counter
   float max_c = 0.0f;            // Maximum change for convergence
 
-  // Block size (adjustable for better cache usage and task granularity)
-  const int block_size = 16;
+  // Block size for tasking (adjust as needed)
+  const int block_size = 84;
 
   while (l < max_iterations)
   {
@@ -88,73 +88,79 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
     {
 #pragma omp single
       {
-        // Red points update
+        // Red points update using tasks
         for (int i = 1; i <= M; i += block_size)
         {
           for (int j = 1; j <= N; j += block_size)
           {
             for (int k = 1; k <= O; k += block_size)
             {
-#pragma omp task depend(out : x) firstprivate(i, j, k)
+#pragma omp task shared(x, x0, max_c) firstprivate(i, j, k)
               {
+                float local_max_c = 0.0f;
+
                 for (int ii = i; ii < MIN(i + block_size, M + 1); ii++)
                 {
                   for (int jj = j; jj < MIN(j + block_size, N + 1); jj++)
                   {
-#pragma omp simd
+#pragma omp simd reduction(max : local_max_c)
                     for (int kk = k + ((ii + jj) % 2); kk < MIN(k + block_size, O + 1); kk += 2)
                     {
                       float old_x = x[IX(ii, jj, kk)];
-                      x[IX(ii, jj, kk)] =
-                          (x0[IX(ii, jj, kk)] +
-                           a * (x[IX(ii - 1, jj, kk)] + x[IX(ii + 1, jj, kk)] +
-                                x[IX(ii, jj - 1, kk)] + x[IX(ii, jj + 1, kk)] +
-                                x[IX(ii, jj, kk - 1)] + x[IX(ii, jj, kk + 1)])) /
-                          c;
-                      max_c = MAX(max_c, fabs(x[IX(ii, jj, kk)] - old_x));
+                      x[IX(ii, jj, kk)] = (x0[IX(ii, jj, kk)] +
+                                           a * (x[IX(ii - 1, jj, kk)] + x[IX(ii + 1, jj, kk)] +
+                                                x[IX(ii, jj - 1, kk)] + x[IX(ii, jj + 1, kk)] +
+                                                x[IX(ii, jj, kk - 1)] + x[IX(ii, jj, kk + 1)])) /
+                                          c;
+                      float change = fabs(x[IX(ii, jj, kk)] - old_x);
+                      local_max_c = MAX(local_max_c, change);
                     }
                   }
                 }
+#pragma omp critical
+                max_c = MAX(max_c, local_max_c);
               }
             }
           }
         }
+#pragma omp taskwait // Ensure all red point tasks are completed
 
-#pragma omp taskwait // Ensure all red updates complete
-
-        // Black points update
+        // Black points update using tasks
         for (int i = 1; i <= M; i += block_size)
         {
           for (int j = 1; j <= N; j += block_size)
           {
             for (int k = 1; k <= O; k += block_size)
             {
-#pragma omp task depend(out : x) firstprivate(i, j, k)
+#pragma omp task shared(x, x0, max_c) firstprivate(i, j, k)
               {
+                float local_max_c = 0.0f;
+
                 for (int ii = i; ii < MIN(i + block_size, M + 1); ii++)
                 {
                   for (int jj = j; jj < MIN(j + block_size, N + 1); jj++)
                   {
-#pragma omp simd
+#pragma omp simd reduction(max : local_max_c)
                     for (int kk = k + ((ii + jj + 1) % 2); kk < MIN(k + block_size, O + 1); kk += 2)
                     {
                       float old_x = x[IX(ii, jj, kk)];
-                      x[IX(ii, jj, kk)] =
-                          (x0[IX(ii, jj, kk)] +
-                           a * (x[IX(ii - 1, jj, kk)] + x[IX(ii + 1, jj, kk)] +
-                                x[IX(ii, jj - 1, kk)] + x[IX(ii, jj + 1, kk)] +
-                                x[IX(ii, jj, kk - 1)] + x[IX(ii, jj, kk + 1)])) /
-                          c;
-                      max_c = MAX(max_c, fabs(x[IX(ii, jj, kk)] - old_x));
+                      x[IX(ii, jj, kk)] = (x0[IX(ii, jj, kk)] +
+                                           a * (x[IX(ii - 1, jj, kk)] + x[IX(ii + 1, jj, kk)] +
+                                                x[IX(ii, jj - 1, kk)] + x[IX(ii, jj + 1, kk)] +
+                                                x[IX(ii, jj, kk - 1)] + x[IX(ii, jj, kk + 1)])) /
+                                          c;
+                      float change = fabs(x[IX(ii, jj, kk)] - old_x);
+                      local_max_c = MAX(local_max_c, change);
                     }
                   }
                 }
+#pragma omp critical
+                max_c = MAX(max_c, local_max_c);
               }
             }
           }
         }
-
-#pragma omp taskwait // Ensure all black updates complete
+#pragma omp taskwait // Ensure all black point tasks are completed
       }
     }
 
