@@ -91,7 +91,7 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
       {
 #pragma omp simd
         int k = 1 + (i + j) % 2;
-#pragma omp parallel for
+#pragma omp parallel for private(k)
         for (k; k <= O; k += 2)
         {
           old_x = x[IX(i, j, k)];
@@ -117,7 +117,7 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
       {
 #pragma omp simd
         int k = 1 + (i + j) % 2;
-#pragma omp parallel for
+#pragma omp parallel for private(k)
         for (k; k <= O; k += 2)
         {
           old_x = x[IX(i, j, k)];
