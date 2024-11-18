@@ -77,7 +77,7 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
   int l = 0;
   float max_c = 0.0f;
 
-  const int block_size = 16;
+  const int block_size = 128;
 
   while (l < max_iterations)
   {
@@ -88,14 +88,14 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
 #pragma omp single nowait
       {
         // Red points update
-
+#pragma omp parallel for collapse(3)
         for (int i = 1; i <= M; i += block_size)
         {
           for (int j = 1; j <= N; j += block_size)
           {
             for (int k = 1; k <= O; k += block_size)
             {
-#pragma omp task shared(x, x0, max_c) firstprivate(i, j, k)
+#pragma omp task shared(x, x0, max_c)
               {
                 float local_max_c = 0.0f;
 #pragma omp simd
@@ -116,7 +116,6 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
                     }
                   }
                 }
-#pragma omp critical
                 max_c = fmaxf(max_c, local_max_c);
               }
             }
@@ -126,13 +125,14 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
 #pragma omp taskwait // Ensure all red point tasks are completed
 
         // Black points update
+#pragma omp parallel for collapse(3)
         for (int i = 1; i <= M; i += block_size)
         {
           for (int j = 1; j <= N; j += block_size)
           {
             for (int k = 1; k <= O; k += block_size)
             {
-#pragma omp task shared(x, x0, max_c) firstprivate(i, j, k)
+#pragma omp task shared(x, x0, max_c)
               {
                 float local_max_c = 0.0f;
 #pragma omp simd
@@ -153,7 +153,6 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
                     }
                   }
                 }
-#pragma omp critical
                 max_c = fmaxf(max_c, local_max_c);
               }
             }
