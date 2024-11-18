@@ -77,6 +77,7 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
   const int max_iterations = 20; // Maximum allowed iterations
   int l = 0;                     // Iteration counter
   float max_c = 0.0f;            // Maximum change for convergence
+  float inv_c = 1.0f / c;
 
   while (l < max_iterations)
   {
@@ -95,8 +96,8 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
           x[IX(i, j, k)] = (x0[IX(i, j, k)] +
                             a * (x[IX(i - 1, j, k)] + x[IX(i + 1, j, k)] +
                                  x[IX(i, j - 1, k)] + x[IX(i, j + 1, k)] +
-                                 x[IX(i, j, k - 1)] + x[IX(i, j, k + 1)])) /
-                           c;
+                                 x[IX(i, j, k - 1)] + x[IX(i, j, k + 1)])) *
+                           inv_c;
           change = fabs(x[IX(i, j, k)] - old_x);
           max_c = MAX(max_c, change);
         }
@@ -119,8 +120,8 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
           x[IX(i, j, k)] = (x0[IX(i, j, k)] +
                             a * (x[IX(i - 1, j, k)] + x[IX(i + 1, j, k)] +
                                  x[IX(i, j - 1, k)] + x[IX(i, j + 1, k)] +
-                                 x[IX(i, j, k - 1)] + x[IX(i, j, k + 1)])) /
-                           c;
+                                 x[IX(i, j, k - 1)] + x[IX(i, j, k + 1)])) *
+                           inv_c;
           change = fabs(x[IX(i, j, k)] - old_x);
           max_c = MAX(max_c, change);
         }
