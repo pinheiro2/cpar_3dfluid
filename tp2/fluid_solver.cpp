@@ -72,6 +72,7 @@ void set_bnd(int M, int N, int O, int b, float *x)
 
 void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c)
 {
+  float old_x, change;
   const float tol = 1e-7;        // Convergence tolerance
   const int max_iterations = 20; // Maximum allowed iterations
   int l = 0;                     // Iteration counter
@@ -90,13 +91,13 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
 #pragma omp simd
         for (int k = 1 + (i + j) % 2; k <= O; k += 2)
         {
-          float old_x = x[IX(i, j, k)];
+          old_x = x[IX(i, j, k)];
           x[IX(i, j, k)] = (x0[IX(i, j, k)] +
                             a * (x[IX(i - 1, j, k)] + x[IX(i + 1, j, k)] +
                                  x[IX(i, j - 1, k)] + x[IX(i, j + 1, k)] +
                                  x[IX(i, j, k - 1)] + x[IX(i, j, k + 1)])) /
                            c;
-          float change = fabs(x[IX(i, j, k)] - old_x);
+          change = fabs(x[IX(i, j, k)] - old_x);
           max_c = MAX(max_c, change);
         }
       }
@@ -114,13 +115,13 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
 #pragma omp simd
         for (int k = 1 + (i + j + 1) % 2; k <= O; k += 2)
         {
-          float old_x = x[IX(i, j, k)];
+          old_x = x[IX(i, j, k)];
           x[IX(i, j, k)] = (x0[IX(i, j, k)] +
                             a * (x[IX(i - 1, j, k)] + x[IX(i + 1, j, k)] +
                                  x[IX(i, j - 1, k)] + x[IX(i, j + 1, k)] +
                                  x[IX(i, j, k - 1)] + x[IX(i, j, k + 1)])) /
                            c;
-          float change = fabs(x[IX(i, j, k)] - old_x);
+          change = fabs(x[IX(i, j, k)] - old_x);
           max_c = MAX(max_c, change);
         }
       }
