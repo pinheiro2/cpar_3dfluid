@@ -89,9 +89,8 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
     {
       for (int j = 1; j <= N; j++)
       {
-        int index = 1 + (i + j) % 2;
-#pragma omp parallel for simd private(index)
-        for (int k = index; k <= O; k += 2)
+#pragma omp parallel for simd
+        for (int k = 1 + (i + j) % 2; k <= O; k += 2)
         {
           old_x = x[IX(i, j, k)];
           x[IX(i, j, k)] = (x0[IX(i, j, k)] +
@@ -114,9 +113,8 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
     {
       for (int j = 1; j <= N; j++)
       {
-        int index = 1 + (i + j) % 2;
-#pragma omp parallel for simd private(index)
-        for (int k = index; k <= O; k += 2)
+#pragma omp parallel for simd
+        for (int k = 1 + (i + j) % 2; k <= O; k += 2)
         {
           old_x = x[IX(i, j, k)];
           x[IX(i, j, k)] = (x0[IX(i, j, k)] +
