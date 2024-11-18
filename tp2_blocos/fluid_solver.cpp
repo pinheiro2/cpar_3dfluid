@@ -88,7 +88,7 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
 #pragma omp single nowait
       {
         // Red points update
-#pragma omp parallel for collapse(3) schedule(dynamic)
+
         for (int i = 1; i <= M; i += block_size)
         {
           for (int j = 1; j <= N; j += block_size)
@@ -98,11 +98,11 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
 #pragma omp task shared(x, x0, max_c) firstprivate(i, j, k)
               {
                 float local_max_c = 0.0f;
+#pragma omp simd
                 for (int ii = i; ii < MIN(i + block_size, M + 1); ii++)
                 {
                   for (int jj = j; jj < MIN(j + block_size, N + 1); jj++)
                   {
-#pragma omp simd reduction(max : local_max_c)
                     for (int kk = k + ((ii + jj) % 2); kk < MIN(k + block_size, O + 1); kk += 2)
                     {
                       float old_x = x[IX(ii, jj, kk)];
@@ -126,7 +126,6 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
 #pragma omp taskwait // Ensure all red point tasks are completed
 
         // Black points update
-#pragma omp parallel for collapse(3) schedule(dynamic)
         for (int i = 1; i <= M; i += block_size)
         {
           for (int j = 1; j <= N; j += block_size)
@@ -136,11 +135,11 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
 #pragma omp task shared(x, x0, max_c) firstprivate(i, j, k)
               {
                 float local_max_c = 0.0f;
+#pragma omp simd
                 for (int ii = i; ii < MIN(i + block_size, M + 1); ii++)
                 {
                   for (int jj = j; jj < MIN(j + block_size, N + 1); jj++)
                   {
-#pragma omp simd reduction(max : local_max_c)
                     for (int kk = k + ((ii + jj + 1) % 2); kk < MIN(k + block_size, O + 1); kk += 2)
                     {
                       float old_x = x[IX(ii, jj, kk)];
