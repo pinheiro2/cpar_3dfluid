@@ -129,8 +129,6 @@ int main()
     return -1;
   clear_data();
 
-  omp_set_proc_bind(omp_proc_bind_close);
-
   // Run simulation with events
   simulate(eventManager, timesteps);
 
