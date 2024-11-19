@@ -28,7 +28,8 @@ void set_bnd(int M, int N, int O, int b, float *x)
 {
   int i, j;
 
-#pragma omp parallel for collapse(2) private(i, j)
+// #pragma omp parallel for collapse(2) private(i, j)
+#pragma omp simd
   for (i = 1; i <= M; i++)
   {
     for (j = 1; j <= N; j++)
@@ -38,7 +39,8 @@ void set_bnd(int M, int N, int O, int b, float *x)
     }
   }
 
-#pragma omp parallel for collapse(2) private(i, j)
+// #pragma omp parallel for collapse(2) private(i, j)
+#pragma omp simd
   for (i = 1; i <= N; i++)
   {
     for (j = 1; j <= O; j++)
@@ -48,7 +50,8 @@ void set_bnd(int M, int N, int O, int b, float *x)
     }
   }
 
-#pragma omp parallel for collapse(2) private(i, j)
+// #pragma omp parallel for collapse(2) private(i, j)
+#pragma omp simd
   for (i = 1; i <= M; i++)
   {
     for (j = 1; j <= O; j++)
