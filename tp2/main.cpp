@@ -20,7 +20,8 @@ static float *u, *v, *w, *u_prev, *v_prev, *w_prev;
 static float *dens, *dens_prev;
 
 // Function to allocate simulation data
-int allocate_data() {
+int allocate_data()
+{
   int size = (M + 2) * (N + 2) * (O + 2);
   u = new float[size];
   v = new float[size];
@@ -31,7 +32,8 @@ int allocate_data() {
   dens = new float[size];
   dens_prev = new float[size];
 
-  if (!u || !v || !w || !u_prev || !v_prev || !w_prev || !dens || !dens_prev) {
+  if (!u || !v || !w || !u_prev || !v_prev || !w_prev || !dens || !dens_prev)
+  {
     std::cerr << "Cannot allocate memory" << std::endl;
     return 0;
   }
@@ -39,16 +41,19 @@ int allocate_data() {
 }
 
 // Function to clear the data (set all to zero)
-void clear_data() {
+void clear_data()
+{
   int size = (M + 2) * (N + 2) * (O + 2);
-  for (int i = 0; i < size; i++) {
+  for (int i = 0; i < size; i++)
+  {
     u[i] = v[i] = w[i] = u_prev[i] = v_prev[i] = w_prev[i] = dens[i] =
         dens_prev[i] = 0.0f;
   }
 }
 
 // Free allocated memory
-void free_data() {
+void free_data()
+{
   delete[] u;
   delete[] v;
   delete[] w;
@@ -60,13 +65,18 @@ void free_data() {
 }
 
 // Apply events (source or force) for the current timestep
-void apply_events(const std::vector<Event> &events) {
-  for (const auto &event : events) {
-    if (event.type == ADD_SOURCE) {
+void apply_events(const std::vector<Event> &events)
+{
+  for (const auto &event : events)
+  {
+    if (event.type == ADD_SOURCE)
+    {
       // Apply density source at the center of the grid
       int i = M / 2, j = N / 2, k = O / 2;
       dens[IX(i, j, k)] = event.density;
-    } else if (event.type == APPLY_FORCE) {
+    }
+    else if (event.type == APPLY_FORCE)
+    {
       // Apply forces based on the event's vector (fx, fy, fz)
       int i = M / 2, j = N / 2, k = O / 2;
       u[IX(i, j, k)] = event.force.x;
@@ -77,18 +87,22 @@ void apply_events(const std::vector<Event> &events) {
 }
 
 // Function to sum the total density
-float sum_density() {
+float sum_density()
+{
   float total_density = 0.0f;
   int size = (M + 2) * (N + 2) * (O + 2);
-  for (int i = 0; i < size; i++) {
+  for (int i = 0; i < size; i++)
+  {
     total_density += dens[i];
   }
   return total_density;
 }
 
 // Simulation loop
-void simulate(EventManager &eventManager, int timesteps) {
-  for (int t = 0; t < timesteps; t++) {
+void simulate(EventManager &eventManager, int timesteps)
+{
+  for (int t = 0; t < timesteps; t++)
+  {
     // Get the events for the current timestep
     std::vector<Event> events = eventManager.get_events_at_timestamp(t);
 
@@ -101,7 +115,8 @@ void simulate(EventManager &eventManager, int timesteps) {
   }
 }
 
-int main() {
+int main()
+{
   // Initialize EventManager
   EventManager eventManager;
   eventManager.read_events("events.txt");
@@ -113,6 +128,8 @@ int main() {
   if (!allocate_data())
     return -1;
   clear_data();
+
+  omp_set_proc_bind(omp_proc_bind_close);
 
   // Run simulation with events
   simulate(eventManager, timesteps);
