@@ -4,9 +4,11 @@ SRCS = main.cpp fluid_solver.cpp EventManager.cpp
 all:
 	fluid_sim_seq phase2
 
-fluid_sim_seq: $(CPP) $(SRCS) -o fluid_sim_seq
+fluid_sim_seq:
+	$(CPP) $(SRCS) -o fluid_sim_seq
 
-phase2: $(CPP) -fopenmp $(SRCS) -o fluid_sim
+phase2:
+	$(CPP) -fopenmp $(SRCS) -o fluid_sim
 
 runseq:
 	./fluid_sim_seq
