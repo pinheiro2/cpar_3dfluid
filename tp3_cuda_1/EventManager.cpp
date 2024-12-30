@@ -4,9 +4,11 @@
 #include <sstream>
 
 // Method to read events from a file and store them
-void EventManager::read_events(const std::string &filename) {
+void EventManager::read_events(const std::string &filename)
+{
   std::ifstream file(filename);
-  if (!file.is_open()) {
+  if (!file.is_open())
+  {
     std::cerr << "Error opening file: " << filename << std::endl;
     return;
   }
@@ -19,22 +21,28 @@ void EventManager::read_events(const std::string &filename) {
   first_line >> total_timesteps;
 
   // Read the remaining lines for events
-  while (std::getline(file, line)) {
+  while (std::getline(file, line))
+  {
     std::istringstream iss(line);
     std::string event_type;
     int x, y, z, density, timestep;
 
     iss >> event_type;
 
-    if (event_type == "source") {
+    if (event_type == "source")
+    {
       // Parse the density and timestep for source event
       iss >> density >> timestep;
       events.emplace_back(density, timestep);
-    } else if (event_type == "force") {
+    }
+    else if (event_type == "force")
+    {
       // Parse the vector and timestep for force event
       iss >> x >> y >> z >> timestep;
       events.emplace_back(x, y, z, timestep);
-    } else {
+    }
+    else
+    {
       std::cerr << "Unknown event type: " << event_type << std::endl;
     }
   }
@@ -43,10 +51,13 @@ void EventManager::read_events(const std::string &filename) {
 }
 
 // Method to get all events for a specific timestamp
-std::vector<Event> EventManager::get_events_at_timestamp(int timestamp) const {
+std::vector<Event> EventManager::get_events_at_timestamp(int timestamp) const
+{
   std::vector<Event> result;
-  for (const auto &event : events) {
-    if (event.timestep == timestamp) {
+  for (const auto &event : events)
+  {
+    if (event.timestep == timestamp)
+    {
       result.push_back(event);
     }
   }

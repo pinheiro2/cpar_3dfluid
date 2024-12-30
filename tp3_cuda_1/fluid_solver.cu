@@ -1,6 +1,7 @@
 #include "fluid_solver.h"
 #include <cmath>
 #include <omp.h>
+#include <stdio.h>
 
 #define IX(i, j, k) ((k) + (M + 2) * (j) + (M + 2) * (N + 2) * (i))
 #define SWAP(x0, x)  \
@@ -23,55 +24,158 @@ void add_source(int M, int N, int O, float *x, float *s, float dt)
     x[i] += dt * s[i];
   }
 }
-
-void set_bnd(int M, int N, int O, int b, float *x)
+__global__ void set_bnd_kernel(int M, int N, int O, int b, float *x)
 {
-  int i, j;
+  int idx = threadIdx.x + blockIdx.x * blockDim.x;
+  int size = (M + 2) * (N + 2);
 
-#pragma omp parallel for collapse(2) private(i, j)
-  for (i = 1; i <= M; i++)
+  if (idx < size)
   {
-    for (j = 1; j <= N; j++)
+    int i = idx / (N + 2);
+    int j = idx % (N + 2);
+
+    if (i >= 1 && i <= M && j >= 1 && j <= N)
     {
       x[IX(i, j, 0)] = b == 3 ? -x[IX(i, j, 1)] : x[IX(i, j, 1)];
       x[IX(i, j, O + 1)] = b == 3 ? -x[IX(i, j, O)] : x[IX(i, j, O)];
     }
   }
+}
+void set_bnd(int M, int N, int O, int b, float *x)
+{
+  int size = (M + 2) * (N + 2);
+  int threadsPerBlock = 256;
+  int blocksPerGrid = (size + threadsPerBlock - 1) / threadsPerBlock;
 
-#pragma omp parallel for collapse(2) private(i, j)
-  for (i = 1; i <= N; i++)
+  set_bnd_kernel<<<blocksPerGrid, threadsPerBlock>>>(M, N, O, b, x);
+  cudaDeviceSynchronize();
+}
+
+__global__ void red_dot_kernel(int M, int N, int O, float *x, float *x0, float a, float c, float *max_changes)
+{
+  int i = blockIdx.x * blockDim.x + threadIdx.x;
+  int j = blockIdx.y * blockDim.y + threadIdx.y;
+  int k = blockIdx.z * blockDim.z + threadIdx.z;
+
+  if (i > 0 && i <= M && j > 0 && j <= N && k > 0 && k <= O)
   {
-    for (j = 1; j <= O; j++)
+    if ((i + j) % 2 == 0) // Red point check
     {
-      x[IX(0, i, j)] = b == 1 ? -x[IX(1, i, j)] : x[IX(1, i, j)];
-      x[IX(M + 1, i, j)] = b == 1 ? -x[IX(M, i, j)] : x[IX(M, i, j)];
+      float old_x = x[IX(i, j, k)];
+      x[IX(i, j, k)] = (x0[IX(i, j, k)] +
+                        a * (x[IX(i - 1, j, k)] + x[IX(i + 1, j, k)] +
+                             x[IX(i, j - 1, k)] + x[IX(i, j + 1, k)] +
+                             x[IX(i, j, k - 1)] + x[IX(i, j, k + 1)])) /
+                       c;
+
+      float change = fabs(x[IX(i, j, k)] - old_x);
+      int idx = blockIdx.x * blockDim.x + threadIdx.x + blockIdx.y * blockDim.y + threadIdx.y + blockIdx.z * blockDim.z + threadIdx.z;
+      max_changes[idx] = change; // Write the change to the array
     }
   }
+}
+__global__ void black_dot_kernel(int M, int N, int O, float *x, float *x0, float a, float c, float *max_changes)
+{
+  int i = blockIdx.x * blockDim.x + threadIdx.x;
+  int j = blockIdx.y * blockDim.y + threadIdx.y;
+  int k = blockIdx.z * blockDim.z + threadIdx.z;
 
-#pragma omp parallel for collapse(2) private(i, j)
-  for (i = 1; i <= M; i++)
+  if (i > 0 && i <= M && j > 0 && j <= N && k > 0 && k <= O)
   {
-    for (j = 1; j <= O; j++)
+    if ((i + j + 1) % 2 == 0) // Black point check
     {
-      x[IX(i, 0, j)] = b == 2 ? -x[IX(i, 1, j)] : x[IX(i, 1, j)];
-      x[IX(i, N + 1, j)] = b == 2 ? -x[IX(i, N, j)] : x[IX(i, N, j)];
+      float old_x = x[IX(i, j, k)];
+      x[IX(i, j, k)] = (x0[IX(i, j, k)] +
+                        a * (x[IX(i - 1, j, k)] + x[IX(i + 1, j, k)] +
+                             x[IX(i, j - 1, k)] + x[IX(i, j + 1, k)] +
+                             x[IX(i, j, k - 1)] + x[IX(i, j, k + 1)])) /
+                       c;
+
+      float change = fabs(x[IX(i, j, k)] - old_x);
+      int idx = blockIdx.x * blockDim.x + threadIdx.x + blockIdx.y * blockDim.y + threadIdx.y + blockIdx.z * blockDim.z + threadIdx.z;
+      max_changes[idx] = change; // Write the change to the array
     }
   }
+}
 
-#pragma omp parallel
+void lin_solve_cuda(int M, int N, int O, int b, float *x, float *x0, float a, float c)
+{
+
+  const float tol = 1e-7;        // Convergence tolerance
+  const int max_iterations = 20; // Maximum allowed iterations
+  int l = 0;                     // Iteration counter
+
+  float *d_x, *d_x0, *d_max_changes;
+  float *max_changes = new float[M * N * O]; // Temporary array to store changes
+
+  // Allocate memory on the device
+  cudaMalloc((void **)&d_x, sizeof(float) * (M + 2) * (N + 2) * (O + 2));
+  cudaMalloc((void **)&d_x0, sizeof(float) * (M + 2) * (N + 2) * (O + 2));
+  cudaMalloc((void **)&d_max_changes, sizeof(float) * M * N * O);
+
+  // Initialize device memory to zero
+  cudaMemset(d_x, 0, sizeof(float) * (M + 2) * (N + 2) * (O + 2));
+  cudaMemset(d_x0, 0, sizeof(float) * (M + 2) * (N + 2) * (O + 2));
+  cudaMemset(d_max_changes, 0, sizeof(float) * M * N * O);
+
+  // Copy data to device
+  cudaMemcpy(d_x, x, sizeof(float) * (M + 2) * (N + 2) * (O + 2), cudaMemcpyHostToDevice);
+  cudaMemcpy(d_x0, x0, sizeof(float) * (M + 2) * (N + 2) * (O + 2), cudaMemcpyHostToDevice);
+
+  // Set smaller grid and block dimensions for debugging purposes
+  dim3 threadsPerBlock(16, 16, 4);
+  dim3 numBlocks((M + threadsPerBlock.x - 1) / threadsPerBlock.x,
+                 (N + threadsPerBlock.y - 1) / threadsPerBlock.y,
+                 (O + threadsPerBlock.z - 1) / threadsPerBlock.z);
+
+  // Loop for the iterations
+
+  while (l < max_iterations)
   {
-    x[IX(0, 0, 0)] = 0.33f * (x[IX(1, 0, 0)] + x[IX(0, 1, 0)] + x[IX(0, 0, 1)]);
-    x[IX(M + 1, 0, 0)] =
-        0.33f * (x[IX(M, 0, 0)] + x[IX(M + 1, 1, 0)] + x[IX(M + 1, 0, 1)]);
-    x[IX(0, N + 1, 0)] =
-        0.33f * (x[IX(1, N + 1, 0)] + x[IX(0, N, 0)] + x[IX(0, N + 1, 1)]);
-    x[IX(M + 1, N + 1, 0)] = 0.33f * (x[IX(M, N + 1, 0)] + x[IX(M + 1, N, 0)] +
-                                      x[IX(M + 1, N + 1, 1)]);
+    float max_c = 0.0f;
+
+    // Launch the red dot kernel
+    red_dot_kernel<<<numBlocks, threadsPerBlock>>>(M, N, O, d_x, d_x0, a, c, d_max_changes);
+    cudaDeviceSynchronize();
+
+    // Launch the black dot kernel
+    black_dot_kernel<<<numBlocks, threadsPerBlock>>>(M, N, O, d_x, d_x0, a, c, d_max_changes);
+    cudaDeviceSynchronize();
+
+    // Copy the max_changes array back from device to host
+    cudaMemcpy(max_changes, d_max_changes, sizeof(float) * M * N * O, cudaMemcpyDeviceToHost);
+
+    // Perform reduction on the host to find the maximum change
+    for (int i = 0; i < M * N * O; i++)
+    {
+      // printf("change: %f", max_changes[i]);
+      max_c = fmaxf(max_c, max_changes[i]);
+    }
+
+    // Update boundary conditions
+    set_bnd(M, N, O, b, d_x);
+
+    // Convergence check
+    if (max_c <= tol)
+      break;
+
+    l++;
   }
+
+  // Copy the results back to host
+  cudaMemcpy(x, d_x, sizeof(float) * (M + 2) * (N + 2) * (O + 2), cudaMemcpyDeviceToHost);
+  // Print some values to check
+
+  // Free memory on the device
+  cudaFree(d_x);
+  cudaFree(d_x0);
+  cudaFree(d_max_changes);
+  delete[] max_changes;
 }
 
 void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c)
 {
+
   float old_x, change;
   const float tol = 1e-7;        // Convergence tolerance
   const int max_iterations = 20; // Maximum allowed iterations
@@ -84,12 +188,10 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
     max_c = 0.0f;
 
     // Red points update
-#pragma omp parallel for collapse(2) reduction(max : max_c) private(old_x, change)
     for (int i = 1; i <= M; i++)
     {
       for (int j = 1; j <= N; j++)
       {
-#pragma omp simd
         for (int k = 1 + (i + j) % 2; k <= O; k += 2)
         {
           old_x = x[IX(i, j, k)];
@@ -105,15 +207,12 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
     }
 
     // Ensure all threads complete red points update
-#pragma omp barrier
 
     // Black points update
-#pragma omp parallel for collapse(2) reduction(max : max_c) private(old_x, change)
     for (int i = 1; i <= M; i++)
     {
       for (int j = 1; j <= N; j++)
       {
-#pragma omp simd
         for (int k = 1 + (i + j + 1) % 2; k <= O; k += 2)
         {
           old_x = x[IX(i, j, k)];
@@ -129,7 +228,6 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
     }
 
     // Ensure all threads complete black points update
-#pragma omp barrier
 
     // Update boundary conditions
     set_bnd(M, N, O, b, x);
@@ -147,6 +245,7 @@ void diffuse(int M, int N, int O, int b, float *x, float *x0, float diff,
 {
   int max = MAX(MAX(M, N), O);
   float a = dt * diff * max * max;
+
   lin_solve(M, N, O, b, x, x0, a, 1 + 6 * a);
 }
 
@@ -155,12 +254,10 @@ void advect(int M, int N, int O, int b, float *d, float *d0, float *u, float *v,
 {
   float dtX = dt * M, dtY = dt * N, dtZ = dt * O;
 
-#pragma omp parallel for collapse(2)
   for (int i = 1; i <= M; i++)
   {
     for (int j = 1; j <= N; j++)
     {
-#pragma omp simd
       for (int k = 1; k <= O; k++)
       {
         float x = i - dtX * u[IX(i, j, k)];
@@ -193,7 +290,6 @@ void advect(int M, int N, int O, int b, float *d, float *d0, float *u, float *v,
 void project(int M, int N, int O, float *u, float *v, float *w, float *p,
              float *div)
 {
-#pragma omp parallel for collapse(3)
   for (int i = 1; i <= M; i++)
   {
     for (int j = 1; j <= N; j++)
@@ -214,7 +310,6 @@ void project(int M, int N, int O, float *u, float *v, float *w, float *p,
   set_bnd(M, N, O, 0, p);
   lin_solve(M, N, O, 0, p, div, 1, 6);
 
-#pragma omp parallel for collapse(3)
   for (int i = 1; i <= M; i++)
   {
     for (int j = 1; j <= N; j++)
@@ -245,6 +340,21 @@ void dens_step(int M, int N, int O, float *x, float *x0, float *u, float *v,
 void vel_step(int M, int N, int O, float *u, float *v, float *w, float *u0,
               float *v0, float *w0, float visc, float dt)
 {
+
+  for (int i = 0; i < M + 2; i++)
+  {
+    for (int j = 0; j < N + 2; j++)
+    {
+      for (int k = 0; k < O + 2; k++)
+      {
+        int idx = IX(i, j, k);
+        printf("Initial u[%d, %d, %d] = %f\n", i, j, k, u[idx]);
+        printf("Initial v[%d, %d, %d] = %f\n", i, j, k, v[idx]);
+        printf("Initial w[%d, %d, %d] = %f\n", i, j, k, w[idx]);
+      }
+    }
+  }
+
   add_source(M, N, O, u, u0, dt);
   add_source(M, N, O, v, v0, dt);
   add_source(M, N, O, w, w0, dt);
