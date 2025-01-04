@@ -2,8 +2,9 @@
 #include "fluid_solver.h"
 #include <iostream>
 #include <vector>
+#include <cuda_runtime.h>
 
-#define SIZE 168
+#define SIZE 84
 
 #define IX(i, j, k) ((i) + (M + 2) * (j) + (M + 2) * (N + 2) * (k))
 
@@ -110,8 +111,53 @@ void simulate(EventManager &eventManager, int timesteps)
     apply_events(events);
 
     // Perform the simulation steps
-    vel_step(M, N, O, u, v, w, u_prev, v_prev, w_prev, visc, dt);
-    dens_step(M, N, O, dens, dens_prev, u, v, w, diff, dt);
+    // Allocate CUDA memory for all arrays
+    float *d_u, *d_v, *d_w, *d_u_prev, *d_v_prev, *d_w_prev;
+    float *d_dens, *d_dens_prev;
+    size_t size = (M + 2) * (N + 2) * (O + 2) * sizeof(float);
+
+    // Allocate and copy velocity arrays
+    cudaMalloc(&d_u, size);
+    cudaMalloc(&d_v, size);
+    cudaMalloc(&d_w, size);
+    cudaMalloc(&d_u_prev, size);
+    cudaMalloc(&d_v_prev, size);
+    cudaMalloc(&d_w_prev, size);
+
+    cudaMemcpy(d_u, u, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_v, v, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_w, w, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_u_prev, u_prev, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_v_prev, v_prev, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_w_prev, w_prev, size, cudaMemcpyHostToDevice);
+
+    // Allocate and copy density arrays
+    cudaMalloc(&d_dens, size);
+    cudaMalloc(&d_dens_prev, size);
+
+    cudaMemcpy(d_dens, dens, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_dens_prev, dens_prev, size, cudaMemcpyHostToDevice);
+
+    // Call velocity and density step functions with device arrays
+    vel_step(M, N, O, d_u, d_v, d_w, d_u_prev, d_v_prev, d_w_prev, visc, dt);
+    dens_step(M, N, O, d_dens, d_dens_prev, d_u, d_v, d_w, diff, dt);
+
+    // Copy results back to the host
+    cudaMemcpy(u, d_u, size, cudaMemcpyDeviceToHost);
+    cudaMemcpy(v, d_v, size, cudaMemcpyDeviceToHost);
+    cudaMemcpy(w, d_w, size, cudaMemcpyDeviceToHost);
+    cudaMemcpy(dens, d_dens, size, cudaMemcpyDeviceToHost);
+    cudaMemcpy(dens_prev, d_dens_prev, size, cudaMemcpyDeviceToHost);
+
+    // Free allocated device memory
+    cudaFree(d_u);
+    cudaFree(d_v);
+    cudaFree(d_w);
+    cudaFree(d_u_prev);
+    cudaFree(d_v_prev);
+    cudaFree(d_w_prev);
+    cudaFree(d_dens);
+    cudaFree(d_dens_prev);
   }
 }
 

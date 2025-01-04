@@ -388,24 +388,9 @@ void project(int M, int N, int O, float *u, float *v, float *w, float *p, float 
   set_bnd(M, N, O, 3, w);
 }
 
-void dens_step(int M, int N, int O, float *x, float *x0, float *u, float *v,
-               float *w, float diff, float dt)
+void dens_step(int M, int N, int O, float *d_x, float *d_x0, float *d_u, float *d_v,
+               float *d_w, float diff, float dt)
 {
-  // Allocate CUDA memory
-  float *d_x, *d_x0, *d_u, *d_v, *d_w;
-  size_t size = (M) * (N) * (O) * sizeof(float);
-  cudaMalloc(&d_x, size);
-  cudaMalloc(&d_x0, size);
-  cudaMalloc(&d_u, size);
-  cudaMalloc(&d_v, size);
-  cudaMalloc(&d_w, size);
-
-  // Copy inputs from host to device
-  cudaMemcpy(d_x, x, size, cudaMemcpyHostToDevice);
-  cudaMemcpy(d_x0, x0, size, cudaMemcpyHostToDevice);
-  cudaMemcpy(d_u, u, size, cudaMemcpyHostToDevice);
-  cudaMemcpy(d_v, v, size, cudaMemcpyHostToDevice);
-  cudaMemcpy(d_w, w, size, cudaMemcpyHostToDevice);
 
   // Perform the steps using device memory
   add_source(M, N, O, d_x, d_x0, dt);
@@ -413,41 +398,11 @@ void dens_step(int M, int N, int O, float *x, float *x0, float *u, float *v,
   diffuse(M, N, O, 0, d_x, d_x0, diff, dt);
   SWAP(d_x0, d_x);
   advect(M, N, O, 0, d_x, d_x0, d_u, d_v, d_w, dt);
-
-  cudaMemcpy(x, d_x, size, cudaMemcpyDeviceToHost);
-  cudaMemcpy(x0, d_x0, size, cudaMemcpyDeviceToHost);
-  cudaMemcpy(u, d_u, size, cudaMemcpyDeviceToHost);
-  cudaMemcpy(v, d_v, size, cudaMemcpyDeviceToHost);
-  cudaMemcpy(w, d_w, size, cudaMemcpyDeviceToHost);
-
-  // Free CUDA memory
-  cudaFree(d_x);
-  cudaFree(d_x0);
-  cudaFree(d_u);
-  cudaFree(d_v);
-  cudaFree(d_w);
 }
 
-void vel_step(int M, int N, int O, float *u, float *v, float *w, float *u0,
-              float *v0, float *w0, float visc, float dt)
+void vel_step(int M, int N, int O, float *d_u, float *d_v, float *d_w, float *d_u0,
+              float *d_v0, float *d_w0, float visc, float dt)
 {
-  // Allocate CUDA memory
-  float *d_u, *d_v, *d_w, *d_u0, *d_v0, *d_w0;
-  size_t size = (M) * (N) * (O) * sizeof(float);
-  cudaMalloc(&d_u, size);
-  cudaMalloc(&d_v, size);
-  cudaMalloc(&d_w, size);
-  cudaMalloc(&d_u0, size);
-  cudaMalloc(&d_v0, size);
-  cudaMalloc(&d_w0, size);
-
-  // Copy inputs from host to device
-  cudaMemcpy(d_u, u, size, cudaMemcpyHostToDevice);
-  cudaMemcpy(d_v, v, size, cudaMemcpyHostToDevice);
-  cudaMemcpy(d_w, w, size, cudaMemcpyHostToDevice);
-  cudaMemcpy(d_u0, u0, size, cudaMemcpyHostToDevice);
-  cudaMemcpy(d_v0, v0, size, cudaMemcpyHostToDevice);
-  cudaMemcpy(d_w0, w0, size, cudaMemcpyHostToDevice);
 
   // Perform the steps using device memory
   add_source(M, N, O, d_u, d_u0, dt);
@@ -467,20 +422,4 @@ void vel_step(int M, int N, int O, float *u, float *v, float *w, float *u0,
   advect(M, N, O, 2, d_v, d_v0, d_u0, d_v0, d_w0, dt);
   advect(M, N, O, 3, d_w, d_w0, d_u0, d_v0, d_w0, dt);
   project(M, N, O, d_u, d_v, d_w, d_u0, d_v0);
-
-  // Copy results back to host
-  cudaMemcpy(u, d_u, size, cudaMemcpyDeviceToHost);
-  cudaMemcpy(v, d_v, size, cudaMemcpyDeviceToHost);
-  cudaMemcpy(w, d_w, size, cudaMemcpyDeviceToHost);
-  cudaMemcpy(u0, d_u0, size, cudaMemcpyDeviceToHost);
-  cudaMemcpy(v0, d_v0, size, cudaMemcpyDeviceToHost);
-  cudaMemcpy(w0, d_w0, size, cudaMemcpyDeviceToHost);
-
-  // Free CUDA memory
-  cudaFree(d_u);
-  cudaFree(d_v);
-  cudaFree(d_w);
-  cudaFree(d_u0);
-  cudaFree(d_v0);
-  cudaFree(d_w0);
 }
