@@ -4,7 +4,7 @@
 #include <vector>
 #include <cuda_runtime.h>
 
-#define SIZE 168
+#define SIZE 84
 
 #define IX(i, j, k) ((i) + (M + 2) * (j) + (M + 2) * (N + 2) * (k))
 

@@ -75,7 +75,7 @@ __global__ void red_dot_kernel(int M, int N, int O, float *x, float *x0, float a
 
   if (i > 0 && i <= M && j > 0 && j <= N && k > 0 && k <= O)
   {
-    if ((i + j) % 2 == 0) // Red point check
+    if ((i + j + k) % 2 == 0) // Red point check
     {
       float old_x = x[IX(i, j, k)];
       x[IX(i, j, k)] = (x0[IX(i, j, k)] +
@@ -99,7 +99,7 @@ __global__ void black_dot_kernel(int M, int N, int O, float *x, float *x0, float
 
   if (i > 0 && i <= M && j > 0 && j <= N && k > 0 && k <= O)
   {
-    if ((i + j + 1) % 2 == 0) // Black point check
+    if ((i + j + k + 1) % 2 == 0) // Black point check
     {
       float old_x = x[IX(i, j, k)];
       x[IX(i, j, k)] = (x0[IX(i, j, k)] +
@@ -149,7 +149,8 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
 {
   const float tol = 1e-7;        // Convergence tolerance
   const int max_iterations = 20; // Maximum allowed iterations
-  int l = 0;                     // Iteration counter
+  float max_c = 0.0f;
+  int l = 0; // Iteration counter
 
   float *d_max_changes, *d_max_result;
   int reduction_size = (M * N * O + 255) / 256;
@@ -187,7 +188,6 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
     cudaMemcpy(max_result, d_max_result, sizeof(float) * blocks, cudaMemcpyDeviceToHost);
 
     // Perform final reduction on host
-    float max_c = 0.0f;
     for (int i = 0; i < blocks; i++)
     {
       max_c = fmaxf(max_c, max_result[i]);
