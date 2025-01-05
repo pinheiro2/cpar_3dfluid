@@ -1,0 +1,13 @@
+Total density after 100 timesteps: 160910
+
+ Performance counter stats for './fluid_simulation':
+
+   268,532,612,654      instructions              #    0.91  insn per cycle                                            
+   294,936,277,732      cycles                                                      
+
+      96.129756265 seconds time elapsed
+
+      61.069131000 seconds user
+      32.831973000 seconds sys
+
+
