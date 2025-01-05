@@ -5,10 +5,6 @@
 #SBATCH --ntasks=1                    # Number of tasks
 #SBATCH --time=5:00                   # Max runtime (hh:mm:ss)
 
-# Load necessary modules
-module load gcc/7.2.0
-module load cuda/11.3.1
-
 # Run the CUDA executable
 perf stat -e instructions,cycles ../fluid_simulation
 
