@@ -1,25 +1,16 @@
 ################################################################################
-# Makefile for general code snippets
-#
-# by André Pereira
+# Simplified Makefile for fluid simulation
 ################################################################################
 
 SHELL = /bin/sh
-BIN_NAME = stencil
+BIN_NAME = fluid_simulation
 
 CXX = nvcc
 LD  = nvcc
 
-CXXFLAGS   = -O2 -g -std=c++11 -arch=sm_35 -Wno-deprecated-gpu-targets 
+CXXFLAGS   = -O2 -std=c++11 -arch=sm_35 -Wno-deprecated-gpu-targets --restrict --use_fast_math
 
-SRC_DIR = src
-BIN_DIR = bin
-BUILD_DIR = build
-SRC = $(wildcard $(SRC_DIR)/*.cu)
-OBJ = $(patsubst src/%.cu,build/%.o,$(SRC))
-BIN = $(BIN_NAME)
-
-vpath %.cu $(SRC_DIR)
+SRC = main.cu fluid_solver.cu EventManager.cpp
 
 ################################################################################
 # Rules
@@ -27,17 +18,10 @@ vpath %.cu $(SRC_DIR)
 
 .DEFAULT_GOAL = all
 
-$(BUILD_DIR)/%.o: %.cu
-	$(CXX) -c $(CXXFLAGS) $(INCLUDES) $< -o $@ $(LIBS)
+all: $(BIN_NAME)
 
-$(BIN_DIR)/$(BIN_NAME): $(OBJ)
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $(OBJ) $(LIBS)
-
-checkdirs:
-	@mkdir -p $(BUILD_DIR)
-	@mkdir -p $(BIN_DIR)
-
-all: checkdirs $(BIN_DIR)/$(BIN_NAME)
+$(BIN_NAME): $(SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $(SRC)
 
 clean:
-	rm -f $(BUILD_DIR)/* $(BIN_DIR)/*
+	rm -f $(BIN_NAME)
